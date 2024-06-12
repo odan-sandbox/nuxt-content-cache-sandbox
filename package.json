@@ -10,5 +10,10 @@
   "dependencies": {
     "@nuxt/content": "^2.12.1",
     "nuxt": "^3.12.1"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@nuxt/content@2.12.1": "patches/@nuxt__content@2.12.1.patch"
+    }
   }
 }

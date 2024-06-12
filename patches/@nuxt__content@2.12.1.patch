@@ -1,0 +1,97 @@
+diff --git a/dist/module.mjs b/dist/module.mjs
+index 9133143933f623400cdd1182932bf106b6613f94..57f8130963f61592998effcb793a43797dbb767b 100644
+--- a/dist/module.mjs
++++ b/dist/module.mjs
+@@ -1,5 +1,5 @@
+ import fs from 'fs';
+-import { defineNuxtModule, createResolver, extendViteConfig, addImports, addComponentsDir, addTemplate, addPlugin, installModule, addVitePlugin } from '@nuxt/kit';
++import { defineNuxtModule, createResolver, extendViteConfig, addImports, addComponentsDir, addTemplate, addPlugin, installModule, addVitePlugin, addServerPlugin } from '@nuxt/kit';
+ import { defu } from 'defu';
+ import { genSafeVariableName, genImport, genDynamicImport } from 'knitwork';
+ import { listen } from 'listhen';
+@@ -655,6 +655,8 @@ const module = defineNuxtModule({
+       return;
+     }
+     addPlugin(resolveRuntimeModule("./plugins/ws"));
++    addServerPlugin(resolveRuntimeModule("./server/plugins/my-plugin"));
++
+     nuxt.hook("nitro:init", async (nitro) => {
+       if (!options.watch || !options.watch.ws) {
+         return;
+@@ -674,6 +676,12 @@ const module = defineNuxtModule({
+         }
+         key = key.substring(MOUNT_PREFIX.length);
+         await nitro.storage.removeItem("cache:content:content-index.json");
++
++        // not working...
++        nitro.hooks.callHook("my-custom-hook", { key });
++        nuxt.callHook("my-custom-hook", { key });
++        nuxt.hooks.callHook("my-custom-hook", { key });
++
+         ws.broadcast({ event, key });
+       });
+     });
+diff --git a/dist/runtime/server/plugins/my-plugin.mjs b/dist/runtime/server/plugins/my-plugin.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..6e2375b8d4d61b8195a959ea5472f26177604fb1
+--- /dev/null
++++ b/dist/runtime/server/plugins/my-plugin.mjs
+@@ -0,0 +1,20 @@
++import { defineNitroPlugin } from 'nitropack/runtime'
++import { useStorage } from "#imports";
++import { cleanCachedContents } from "../storage";
++
++export default defineNitroPlugin((nitroApp) => {
++  console.log('defineNitroPlugin');
++  const storage = useStorage()
++  // console.log("storage", storage);
++  storage.watch(async (event, key) => {
++    if (key.startsWith('content:source')) {
++      console.log('storage.watch', event, key);
++      cleanCachedContents();
++    }
++  });
++
++  // not called...
++  nitroApp.hooks.hook('my-custom-hook', (key) => {
++    console.log('Hello from my custom hook!', key)
++  })
++})
+\ No newline at end of file
+diff --git a/dist/runtime/server/storage.js b/dist/runtime/server/storage.js
+index 4364d28365189d92d9a00fe7c977fbf4229f0268..0b163899cbba1a81c702353f8478cbea2e159ac1 100644
+--- a/dist/runtime/server/storage.js
++++ b/dist/runtime/server/storage.js
+@@ -62,8 +62,14 @@ export function* chunksFromArray(arr, n) {
+     yield arr.slice(i, i + n);
+   }
+ }
++
++let cachedContents = [];
++export const cleanCachedContents = () => {
++  console.log('cleanCachedContents');
++  cachedContents = [];
++}
++
+ export const getContentsList = /* @__PURE__ */ (() => {
+-  let cachedContents = [];
+   let pendingContentsListPromise = null;
+   const _getContentsList = async (event, prefix) => {
+     const keys = await getContentsIds(event, prefix);
+@@ -79,13 +85,14 @@ export const getContentsList = /* @__PURE__ */ (() => {
+     if (event.context.__contentList) {
+       return event.context.__contentList;
+     }
+-    if (isPrerendering && cachedContents.length) {
++    if (cachedContents.length) {
++      console.log("using cached contents");
+       return cachedContents;
+     }
+     if (!pendingContentsListPromise) {
+       pendingContentsListPromise = _getContentsList(event, prefix);
+       pendingContentsListPromise.then((result) => {
+-        if (isPrerendering) {
++        if (isPrerendering || true) {
+           cachedContents = result;
+         }
+         event.context.__contentList = result;
